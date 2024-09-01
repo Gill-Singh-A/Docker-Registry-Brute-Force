@@ -107,3 +107,18 @@ if __name__ == "__main__":
         arguments.timeout = float(arguments.timeout)
     if not arguments.write:
         arguments.write = f"{date.today()} {strftime('%H_%M_%S', localtime())}.csv"
+    total_servers = len(arguments.target)
+    display('+', f"Total Target Servers = {Back.MAGENTA}{total_servers}{Back.RESET}")
+    display('+', f"Total Credentials    = {Back.MAGENTA}{len(arguments.credentials)}{Back.RESET}")
+    t1 = time()
+    successful_logins = {}
+    pool = Pool(thread_count)
+    server_divisions = [arguments.target[group*total_servers//thread_count: (group+1)*total_servers//thread_count] for group in range(thread_count)]
+    threads = []
+    display(':', f"Staring {Back.MAGENTA}{thread_count}{Back.RESET} Threads")
+    for index, server_division in enumerate(server_divisions):
+        threads.append(pool.apply_async(loginHandler, (index, server_division, arguments.credentials, arguments.timeout)))
+    for thread in threads:
+        successful_logins.update(thread.get())
+    pool.close()
+    pool.join()
