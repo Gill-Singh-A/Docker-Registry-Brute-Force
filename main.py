@@ -74,8 +74,9 @@ if __name__ == "__main__":
             exit(0)
     if not arguments.credentials:
         if not arguments.users:
-            display('-', f"Please specify {Back.YELLOW}Target Users{Back.RESET}")
-            exit(0)
+            arguments.users, arguments.password = [''], ['']
+            display('*', f"No {Back.MAGENTA}USER{Back.RESET} Specified")
+            display(':', f"Trying to Find {Back.MAGENTA}Unauthorized Access{Back.RESET}")
         else:
             try:
                 with open(arguments.users, 'r') as file:
@@ -89,7 +90,7 @@ if __name__ == "__main__":
         if not arguments.password:
             display('-', f"Please specify {Back.YELLOW}Passwords{Back.RESET}")
             exit(0)
-        else:
+        elif arguments.password != ['']:
             try:
                 with open(arguments.password, 'r') as file:
                     arguments.password = [password for password in file.read().split('\n') if password != '']
