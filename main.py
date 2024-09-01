@@ -2,6 +2,7 @@
 
 from datetime import date
 from optparse import OptionParser
+from docker_registry_client import DockerRegistryClient
 from colorama import Fore, Back, Style
 from multiprocessing import Pool, Lock, cpu_count
 from time import strftime, localtime, time
@@ -23,16 +24,24 @@ def get_arguments(*args):
         parser.add_option(arg[0], arg[1], dest=arg[2], help=arg[3])
     return parser.parse_args()[0]
 
+scheme = "http"
 lock = Lock()
 thread_count = cpu_count()
 
-def login(target, username, password, timeout=None):
-    pass
-def loginHandler(thread_index, targets, credentials, timeout=None):
+def login(target, username, password):
+    t1 = time()
+    try:
+        DockerRegistryClient(f"{scheme}://{target}", username=username, password=password)
+        t2 = time()
+        return True, t2-t1
+    except Exception as error:
+        t2 = time()
+        return False, t2-t1 if "401" in str(error) and "Unauthorized" in str(error) else error, t2-t1
+def loginHandler(thread_index, targets, credentials):
     successful_logins = {}
     for username, password in credentials:
         for target in targets:
-            status, time_taken = login(target, username, password, timeout)
+            status, time_taken = login(target, username, password)
             if status == True:
                 successful_logins[target] = [username, password]
                 with lock:
@@ -101,10 +110,6 @@ if __name__ == "__main__":
         except:
             display('-', f"Error while Reading File {Back.YELLOW}{arguments.credentials}{Back.RESET}")
             exit(0)
-    if not arguments.timeout:
-        arguments.timeout = None
-    else:
-        arguments.timeout = float(arguments.timeout)
     if not arguments.write:
         arguments.write = f"{date.today()} {strftime('%H_%M_%S', localtime())}.csv"
     total_servers = len(arguments.target)
@@ -117,7 +122,7 @@ if __name__ == "__main__":
     threads = []
     display(':', f"Staring {Back.MAGENTA}{thread_count}{Back.RESET} Threads")
     for index, server_division in enumerate(server_divisions):
-        threads.append(pool.apply_async(loginHandler, (index, server_division, arguments.credentials, arguments.timeout)))
+        threads.append(pool.apply_async(loginHandler, (index, server_division, arguments.credentials)))
     for thread in threads:
         successful_logins.update(thread.get())
     pool.close()
