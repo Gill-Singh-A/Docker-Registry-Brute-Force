@@ -3,6 +3,7 @@
 from datetime import date
 from optparse import OptionParser
 from colorama import Fore, Back, Style
+from multiprocessing import Pool, Lock, cpu_count
 from time import strftime, localtime, time
 
 status_color = {
@@ -21,6 +22,28 @@ def get_arguments(*args):
     for arg in args:
         parser.add_option(arg[0], arg[1], dest=arg[2], help=arg[3])
     return parser.parse_args()[0]
+
+lock = Lock()
+thread_count = cpu_count()
+
+def login(target, username, password, timeout=None):
+    pass
+def loginHandler(thread_index, targets, credentials, timeout=None):
+    successful_logins = {}
+    for username, password in credentials:
+        for target in targets:
+            status, time_taken = login(target, username, password, timeout)
+            if status == True:
+                successful_logins[target] = [username, password]
+                with lock:
+                    display(' ', f"Thread {thread_index+1}:{time_taken:.2f}s -> {Fore.CYAN}{username}{Fore.RESET}:{Fore.GREEN}{password}{Fore.RESET}@{Fore.MAGENTA}{target}{Fore.RESET} => {Back.MAGENTA}{Fore.BLUE}Authorized{Fore.RESET}{Back.RESET}")
+            elif status == False:
+                with lock:
+                    display(' ', f"Thread {thread_index+1}:{time_taken:.2f}s -> {Fore.CYAN}{username}{Fore.RESET}:{Fore.GREEN}{password}{Fore.RESET}@{Fore.MAGENTA}{target}{Fore.RESET} => {Back.RED}{Fore.YELLOW}Access Denied{Fore.RESET}{Back.RESET}")
+            else:
+                with lock:
+                    display(' ', f"Thread {thread_index+1}:{time_taken:.2f}s -> {Fore.CYAN}{username}{Fore.RESET}:{Fore.GREEN}{password}{Fore.RESET}@{Fore.MAGENTA}{target}{Fore.RESET} => {Fore.YELLOW}Error Occured : {Back.RED}{status}{Fore.RESET}{Back.RESET}")
+    return successful_logins
 
 if __name__ == "__main__":
     arguments = get_arguments(('-t', "--target", "target", "Target Servers (Seperated by ',' or File Name)"),
