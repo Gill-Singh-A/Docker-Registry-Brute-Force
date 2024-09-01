@@ -36,7 +36,7 @@ def login(target, username, password):
         return True, t2-t1
     except Exception as error:
         t2 = time()
-        return False, t2-t1 if "401" in str(error) and "Unauthorized" in str(error) else error, t2-t1
+        return (False, t2-t1) if "401" in str(error) and "Unauthorized" in str(error) else (error, t2-t1)
 def loginHandler(thread_index, targets, credentials):
     successful_logins = {}
     for username, password in credentials:
