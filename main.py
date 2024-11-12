@@ -28,10 +28,10 @@ scheme = "http"
 lock = Lock()
 thread_count = cpu_count()
 
-def login(target, username, password):
+def login(target, username=None, password=None):
     t1 = time()
     try:
-        DockerRegistryClient(f"{scheme}://{target}", username=username, password=password)
+        DockerRegistryClient(f"{scheme}://{target}", username=username, password=password) if username != None and username != '' else DockerRegistryClient(f"{scheme}://{target}")
         t2 = time()
         return True, t2-t1
     except Exception as error:
