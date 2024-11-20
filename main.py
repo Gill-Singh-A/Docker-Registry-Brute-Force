@@ -31,7 +31,8 @@ thread_count = cpu_count()
 def login(target, username=None, password=None):
     t1 = time()
     try:
-        DockerRegistryClient(f"{scheme}://{target}", username=username, password=password) if username != None and username != '' else DockerRegistryClient(f"{scheme}://{target}")
+        docker_registry = DockerRegistryClient(f"{scheme}://{target}", username=username, password=password) if username != None and username != '' else DockerRegistryClient(f"{scheme}://{target}")
+        docker_registry.namespaces()
         t2 = time()
         return True, t2-t1
     except Exception as error:
