@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 
+from json import dump
 from datetime import date
 from optparse import OptionParser
 from docker_registry_client import DockerRegistryClient
@@ -25,6 +26,7 @@ def get_arguments(*args):
     return parser.parse_args()[0]
 
 scheme = "http"
+dump_details = False
 lock = Lock()
 thread_count = cpu_count()
 
@@ -32,19 +34,24 @@ def login(target, username=None, password=None, timeout=None):
     t1 = time()
     try:
         docker_registry = DockerRegistryClient(f"{scheme}://{target}", username=username, password=password, api_timeout=timeout) if username != None and username != '' else DockerRegistryClient(f"{scheme}://{target}")
-        docker_registry.namespaces()
+        namespace = docker_registry.namespaces()
+        if dump_details:
+            repositories = [key  for key, value in docker_registry.repositories().items()]
+            details = {"namespace": namespace, "repositories": repositories}
+        else:
+            details = None
         t2 = time()
-        return True, t2-t1
+        return True, t2-t1, details
     except Exception as error:
         t2 = time()
-        return (False, t2-t1) if "401" in str(error) and "Unauthorized" in str(error) else (error, t2-t1)
+        return (False, t2-t1) if "401" in str(error) and "Unauthorized" in str(error) else (error, t2-t1), None
 def loginHandler(thread_index, targets, credentials, timeout):
     successful_logins = {}
     for username, password in credentials:
         for target in targets:
-            status, time_taken = login(target, username, password, timeout)
+            status, time_taken, details = login(target, username, password, timeout)
             if status == True:
-                successful_logins[target] = [username, password]
+                successful_logins[target] = [username, password, details]
                 with lock:
                     display(' ', f"Thread {thread_index+1}:{time_taken:.2f}s -> {Fore.CYAN}{username}{Fore.RESET}:{Fore.GREEN}{password}{Fore.RESET}@{Fore.MAGENTA}{target}{Fore.RESET} => {Back.MAGENTA}{Fore.BLUE}Authorized{Fore.RESET}{Back.RESET}")
             elif status == False:
@@ -60,6 +67,7 @@ if __name__ == "__main__":
                               ('-u', "--users", "users", "Target Users (seperated by ',') or File containing List of Users"),
                               ('-P', "--password", "password", "Passwords (seperated by ',') or File containing List of Passwords"),
                               ('-c', "--credentials", "credentials", "Name of File containing Credentials in format ({user}:{password})"),
+                              ('-d', "--details", "details", "JSON File to store details about Docker Registry (Optional)"),
                               ('-T', "--timeout", "timeout", "Timeout for Request"),
                               ('-w', "--write", "write", "CSV File to Dump Successful Logins (default=current data and time)"))
     if not arguments.target:
@@ -113,6 +121,8 @@ if __name__ == "__main__":
         except:
             display('-', f"Error while Reading File {Back.YELLOW}{arguments.credentials}{Back.RESET}")
             exit(0)
+    if arguments.details:
+        dump_details = True
     arguments.timeout = float(arguments.timeout) if arguments.timeout else None
     if not arguments.write:
         arguments.write = f"{date.today()} {strftime('%H_%M_%S', localtime())}.csv"
@@ -140,5 +150,8 @@ if __name__ == "__main__":
         display(':', f"Dumping Successful Logins to File {Back.MAGENTA}{arguments.write}{Back.RESET}")
         with open(arguments.write, 'w') as file:
             file.write(f"Server,Username,Password\n")
-            file.write('\n'.join([f"{server},{username},{password}" for server, (username, password) in successful_logins.items()]))
+            file.write('\n'.join([f"{server},{username},{password}" for server, (username, password, details) in successful_logins.items()]))
+        if arguments.details:
+            with open(arguments.details, 'w') as file:
+                dump({server: details for server, (username, password, details) in successful_logins.items()}, file)
         display('+', f"Dumped Successful Logins to File {Back.MAGENTA}{arguments.write}{Back.RESET}")
