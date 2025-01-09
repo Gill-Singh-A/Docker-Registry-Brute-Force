@@ -44,7 +44,7 @@ def login(target, username=None, password=None, timeout=None):
         return True, t2-t1, details
     except Exception as error:
         t2 = time()
-        return (False, t2-t1) if "401" in str(error) and "Unauthorized" in str(error) else (error, t2-t1), None
+        return (False, t2-t1, None) if "401" in str(error) and "Unauthorized" in str(error) else (error, t2-t1, None)
 def loginHandler(thread_index, targets, credentials, timeout):
     successful_logins = {}
     for username, password in credentials:
@@ -152,6 +152,6 @@ if __name__ == "__main__":
             file.write(f"Server,Username,Password\n")
             file.write('\n'.join([f"{server},{username},{password}" for server, (username, password, details) in successful_logins.items()]))
         if arguments.details:
+            display(':', f"Dumping Details to File {Back.MAGENTA}{arguments.details}{Back.RESET}")
             with open(arguments.details, 'w') as file:
                 dump({server: details for server, (username, password, details) in successful_logins.items()}, file)
-        display('+', f"Dumped Successful Logins to File {Back.MAGENTA}{arguments.write}{Back.RESET}")
