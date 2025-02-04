@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 
-import requests
+import requests, warnings
 from json import dump
 from datetime import date
 from base64 import b64encode
@@ -27,6 +27,7 @@ def get_arguments(*args):
     return parser.parse_args()[0]
 
 scheme = "http"
+warnings.filterwarnings('ignore')
 dump_details = False
 lock = Lock()
 thread_count = cpu_count()
@@ -38,10 +39,10 @@ def login(target, username=None, password=None, timeout=None):
         if username != None:
             basic_authorization = b64encode(f"{username}:{password}".encode()).decode()
             headers["Authorization"] = f"Basic {basic_authorization}"
-        response = requests.get(f"{scheme}://{target}/v2", headers=headers)
+        response = requests.get(f"{scheme}://{target}/v2", headers=headers, verify=False)
         authorization = True if response.status_code == 200 and response.json() == {} else False
         if dump_details:
-            response = requests.get(f"{scheme}://{target}/v2/_catalog", headers=headers)
+            response = requests.get(f"{scheme}://{target}/v2/_catalog", headers=headers, verify=False)
             repositories = response.json()
             details = {"repositories": repositories}
         else:
