@@ -1,9 +1,10 @@
 #! /usr/bin/env python3
 
+import requests
 from json import dump
 from datetime import date
+from base64 import b64encode
 from optparse import OptionParser
-from docker_registry_client import DockerRegistryClient
 from colorama import Fore, Back, Style
 from multiprocessing import Pool, Lock, cpu_count
 from time import strftime, localtime, time
@@ -33,15 +34,22 @@ thread_count = cpu_count()
 def login(target, username=None, password=None, timeout=None):
     t1 = time()
     try:
-        docker_registry = DockerRegistryClient(f"{scheme}://{target}", username=username, password=password, api_timeout=timeout) if username != None and username != '' else DockerRegistryClient(f"{scheme}://{target}")
-        namespace = docker_registry.namespaces()
+        headers = {}
+        if username != None:
+            basic_authorization = b64encode(f"{username}:{password}".encode()).decode()
+            headers["Authorization"] = f"Basic {basic_authorization}"
+        response = requests.get(f"{scheme}://{target}/v2", headers=headers)
+        with lock:
+            print(response.json())
+        authorization = True if response.status_code == 200 and response.json() == {} else False
         if dump_details:
-            repositories = [key  for key, value in docker_registry.repositories().items()]
-            details = {"namespace": namespace, "repositories": repositories}
+            response = requests.get(f"{scheme}://{target}/v2/_catalog", headers=headers)
+            repositories = response.json()
+            details = {"repositories": repositories}
         else:
             details = None
         t2 = time()
-        return True, t2-t1, details
+        return authorization, t2-t1, details
     except Exception as error:
         t2 = time()
         return (False, t2-t1, None) if "401" in str(error) and "Unauthorized" in str(error) else (error, t2-t1, None)
