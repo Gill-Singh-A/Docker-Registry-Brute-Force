@@ -39,8 +39,6 @@ def login(target, username=None, password=None, timeout=None):
             basic_authorization = b64encode(f"{username}:{password}".encode()).decode()
             headers["Authorization"] = f"Basic {basic_authorization}"
         response = requests.get(f"{scheme}://{target}/v2", headers=headers)
-        with lock:
-            print(response.json())
         authorization = True if response.status_code == 200 and response.json() == {} else False
         if dump_details:
             response = requests.get(f"{scheme}://{target}/v2/_catalog", headers=headers)
