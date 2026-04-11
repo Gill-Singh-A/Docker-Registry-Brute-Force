@@ -18,7 +18,6 @@ status_color = {
     ' ': Fore.WHITE
 }
 
-scheme = "http"
 warnings.filterwarnings('ignore')
 dump_details = False
 lock = Lock()
@@ -29,7 +28,7 @@ successful_logins = {}
 def display(status, data, start='', end='\n'):
     print(f"{start}{status_color[status]}[{status}] {Fore.BLUE}[{date.today()} {strftime('%H:%M:%S', localtime())}] {status_color[status]}{Style.BRIGHT}{data}{Fore.RESET}{Style.RESET_ALL}", end=end)
 
-def get_arguments(*args):
+def get_arguments():
     description = "Docker Registry Brute Force"
     parser = ArgumentParser(description=description)
     parser.add_argument('-t', "--target", type=str, required=True, help="Target Servers (Seperated by ',' or File Name)")
@@ -39,7 +38,7 @@ def get_arguments(*args):
     parser.add_argument('-d', "--details", type=str, help="JSON File to store details about Docker Registry (Optional)")
     parser.add_argument('-W', "--threads", type=int, help=f"Threads to Spawn (Default={thread_count})", default=thread_count)
     parser.add_argument('-T', "--timeout", type=float, help="Timeout for Request", default=None)
-    parser.add_argument('-w', "--write", type=str, help="CSV File to Dump Successful Logins (default=current data and time", default=f"{date.today()} {strftime('%H_%M_%S', localtime())}.csv")
+    parser.add_argument('-w', "--write", type=str, help="CSV File to Dump Successful Logins (default=current date and time)", default=f"{date.today()} {strftime('%H_%M_%S', localtime())}.csv")
     return parser.parse_args()
 
 def login(target, username=None, password=None, timeout=None):
@@ -49,10 +48,10 @@ def login(target, username=None, password=None, timeout=None):
         if username != None:
             basic_authorization = b64encode(f"{username}:{password}".encode()).decode()
             headers["Authorization"] = f"Basic {basic_authorization}"
-        response = requests.get(f"{scheme}://{target}/v2", headers=headers, verify=False, timeout=timeout)
+        response = requests.get(f"{target}/v2", headers=headers, verify=False, timeout=timeout)
         authorization = True if response.status_code == 200 and response.json() == {} else False
         if dump_details:
-            response = requests.get(f"{scheme}://{target}/v2/_catalog", headers=headers, verify=False, timeout=timeout)
+            response = requests.get(f"{target}/v2/_catalog", headers=headers, verify=False, timeout=timeout)
             repositories = response.json()
             details = {"repositories": repositories}
         else:
