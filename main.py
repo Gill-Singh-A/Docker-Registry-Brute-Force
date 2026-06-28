@@ -1,7 +1,10 @@
 #! /usr/bin/env python3
 
 import requests, warnings
+
 from json import dump
+from tqdm import tqdm
+from sys import stdout
 from datetime import date
 from base64 import b64encode
 from argparse import ArgumentParser
@@ -23,9 +26,11 @@ dump_details = False
 lock = Lock()
 thread_count = 100
 successful_logins = {}
+bar = None
 
-
-def display(status, data, start='', end='\n'):
+def display(status, data, start='', end='\n', return_string=False):
+    if return_string:
+        return f"{start}{status_color[status]}[{status}] {Fore.BLUE}[{date.today()} {strftime('%H:%M:%S', localtime())}] {status_color[status]}{Style.BRIGHT}{data}{Fore.RESET}{Style.RESET_ALL}"
     print(f"{start}{status_color[status]}[{status}] {Fore.BLUE}[{date.today()} {strftime('%H:%M:%S', localtime())}] {status_color[status]}{Style.BRIGHT}{data}{Fore.RESET}{Style.RESET_ALL}", end=end)
 
 def get_arguments():
@@ -72,13 +77,8 @@ def loginHandler(thread_index, queue, credentials, timeout):
             if status == True:
                 with lock:
                     successful_logins[target] = [username, password, details]
-                    display(' ', f"Thread {thread_index+1}:{time_taken:.2f}s -> {Fore.CYAN}{username}{Fore.RESET}:{Fore.GREEN}{password}{Fore.RESET}@{Fore.MAGENTA}{target}{Fore.RESET} => {Back.MAGENTA}{Fore.BLUE}Authorized{Fore.RESET}{Back.RESET}")
-            elif status == False:
-                with lock:
-                    display(' ', f"Thread {thread_index+1}:{time_taken:.2f}s -> {Fore.CYAN}{username}{Fore.RESET}:{Fore.GREEN}{password}{Fore.RESET}@{Fore.MAGENTA}{target}{Fore.RESET} => {Back.RED}{Fore.YELLOW}Access Denied{Fore.RESET}{Back.RESET}")
-            else:
-                with lock:
-                    display(' ', f"Thread {thread_index+1}:{time_taken:.2f}s -> {Fore.CYAN}{username}{Fore.RESET}:{Fore.GREEN}{password}{Fore.RESET}@{Fore.MAGENTA}{target}{Fore.RESET} => {Fore.YELLOW}Error Occured : {Back.RED}{status}{Fore.RESET}{Back.RESET}")
+                    tqdm.write(display(' ', f"Thread {thread_index+1}:{time_taken:.2f}s -> {Fore.CYAN}{username}{Fore.RESET}:{Fore.GREEN}{password}{Fore.RESET}@{Fore.MAGENTA}{target}{Fore.RESET} => {Back.MAGENTA}{Fore.BLUE}Authorized{Fore.RESET}{Back.RESET}", return_string=True))
+            bar.update(1)
 
 if __name__ == "__main__":
     arguments = get_arguments()
@@ -138,6 +138,7 @@ if __name__ == "__main__":
     queue = Queue()
     for target in arguments.target:
         queue.put(target)
+    bar = tqdm(desc="Docker Registry Brute Force", position=0, total=len(arguments.target) * len(arguments.credentials), unit="attempt", dynamic_ncols=True, file=stdout)
     threads = []
     for thread_index in range(thread_count):
         threads.append(Thread(target=loginHandler, args=(thread_index, queue, arguments.credentials, arguments.timeout, )))
